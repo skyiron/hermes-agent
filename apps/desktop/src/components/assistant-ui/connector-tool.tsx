@@ -38,6 +38,19 @@ export function ConnectorTool(props: ToolCallMessagePartProps) {
   const latest = latestConnectorPart(messages)
 
   const historical = latest?.type === 'tool-call' && latest.toolCallId !== props.toolCallId
+  // A status call with no target list describes the whole catalog. That is an
+  // answer for the model, not an offer to the user: rendering it as rows put a
+  // Connect button on every app the gateway knows.
+  const input = recordOf(props.args)
+
+  const untargetedStatus =
+    props.toolName === 'manage_connections' &&
+    input.action === 'status' &&
+    !(Array.isArray(input.connectors) && input.connectors.length > 0)
+
+  // Neither kind of part owns the live offer, so neither resolves an owner or
+  // polls the gateway.
+  const inert = historical || untargetedStatus
 
   const [owner, setOwner] = useState<{
     storedId: string
@@ -49,7 +62,7 @@ export function ConnectorTool(props: ToolCallMessagePartProps) {
   const [ownerFailure, setOwnerFailure] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!storedId || !runtimeId || historical) {
+    if (!storedId || !runtimeId || inert) {
       return
     }
 
@@ -78,14 +91,14 @@ export function ConnectorTool(props: ToolCallMessagePartProps) {
     return () => {
       cancelled = true
     }
-  }, [storedId, runtimeId, historical])
+  }, [storedId, runtimeId, inert])
   const rows = connectionRows(props.args, props.result)
   const signature = rows.map(row => row.connector).join('|')
 
   const flow = useMemo(() => {
     if (
       firstBuild ||
-      historical ||
+      inert ||
       !runtimeId ||
       !owner ||
       owner.storedId !== storedId ||
@@ -106,7 +119,7 @@ export function ConnectorTool(props: ToolCallMessagePartProps) {
         await window.hermesDesktop.openExternal(url)
       }
     })
-  }, [runtimeId, owner, storedId, signature, historical, firstBuild])
+  }, [runtimeId, owner, storedId, signature, inert, firstBuild])
 
   const { t } = useI18n()
   // Ordinary sessions require a click to begin authorization.
@@ -123,7 +136,7 @@ export function ConnectorTool(props: ToolCallMessagePartProps) {
     }
   }, [flow, props.result])
 
-  if (historical) {
+  if (inert) {
     return <ToolFallback {...props} />
   }
 
