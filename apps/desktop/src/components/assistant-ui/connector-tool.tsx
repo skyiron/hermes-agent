@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { requestComposerSubmit } from '@/app/chat/composer/focus'
 import { useSessionView } from '@/app/chat/session-view'
+import { isFirstBuildSession } from '@/app/contrib/handoff-receipt'
 import { resolveSessionOwner } from '@/app/session/hooks/use-session-actions/utils'
 import { ToolFallback } from '@/components/assistant-ui/tool/fallback'
+import { FirstBuildConnectorOffer } from '@/components/assistant-ui/first-build-connectors'
 import { Button } from '@/components/ui/button'
 import { ConnectorCard, type ConnectorCardCopy } from '@/components/ui/connector-card'
 import { Loader } from '@/components/ui/loader'
@@ -24,6 +26,7 @@ export function ConnectorTool(props: ToolCallMessagePartProps) {
   const storedId = useStore(view.$storedId)
   const busy = useStore(view.$busy)
   const messages = useStore(view.$messages)
+  const firstBuild = isFirstBuildSession(storedId)
 
   const latest = messages
     .flatMap(message => message.parts)
@@ -77,7 +80,14 @@ export function ConnectorTool(props: ToolCallMessagePartProps) {
   const signature = rows.map(row => row.connector).join('|')
 
   const flow = useMemo(() => {
-    if (historical || !runtimeId || !owner || owner.storedId !== storedId || owner.runtimeId !== runtimeId) {
+    if (
+      firstBuild ||
+      historical ||
+      !runtimeId ||
+      !owner ||
+      owner.storedId !== storedId ||
+      owner.runtimeId !== runtimeId
+    ) {
       return null
     }
 
@@ -93,11 +103,10 @@ export function ConnectorTool(props: ToolCallMessagePartProps) {
         await window.hermesDesktop.openExternal(url)
       }
     })
-  }, [runtimeId, owner, storedId, signature, historical])
+  }, [runtimeId, owner, storedId, signature, historical, firstBuild])
 
   const { t } = useI18n()
-  // A result is a snapshot. Reopening a transcript only refreshes status; it
-  // cannot mint links, open tabs or restart an abandoned authorization.
+  // Ordinary sessions require a click to begin authorization.
   useEffect(() => {
     if (!flow) {
       return
@@ -113,6 +122,16 @@ export function ConnectorTool(props: ToolCallMessagePartProps) {
 
   if (historical) {
     return <ToolFallback {...props} />
+  }
+
+  if (firstBuild && storedId && owner?.storedId === storedId && owner.runtimeId === runtimeId) {
+    return (
+      <FirstBuildConnectorOffer
+        part={props}
+        storedId={storedId}
+        target={view.kind === 'tile' ? `tile:${storedId}` : 'main'}
+      />
+    )
   }
 
   if (!flow) {
