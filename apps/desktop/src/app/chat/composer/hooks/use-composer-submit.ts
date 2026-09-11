@@ -113,8 +113,8 @@ export function useComposerSubmit({
   // button) route through the same send path. Match both the composer target
   // and the exact visible surface captured at click time — every tile stays
   // mounted, and a session can be rendered in more than one pane.
-  const dispatchSubmitRef = useRef(dispatchSubmit)
-  dispatchSubmitRef.current = dispatchSubmit
+  const externalSubmitRef = useRef({ busy, compacting, dispatchSubmit, onSteer })
+  externalSubmitRef.current = { busy, compacting, dispatchSubmit, onSteer }
 
   useLayoutEffect(
     () =>
@@ -126,10 +126,36 @@ export function useComposerSubmit({
           paneVisible &&
           !inputDisabled
         ) {
-          dispatchSubmitRef.current(text, undefined, displayKind)
+          const current = externalSubmitRef.current
+
+          if (!current.busy || displayKind) {
+            current.dispatchSubmit(text, undefined, displayKind)
+
+            return
+          }
+
+          const queueKey = activeQueueSessionKeyRef.current
+          // External requests contain only text; the unsent draft and its attachments stay in the composer.
+          const enqueue = () => void enqueueQueuedPrompt(queueKey, { text, attachments: [] })
+
+          if (
+            current.onSteer &&
+            !current.compacting &&
+            !hasBlockingPromptRequest(sessionId) &&
+            text.trim() &&
+            !SLASH_COMMAND_RE.test(text.trim())
+          ) {
+            void Promise.resolve(current.onSteer(text)).then(accepted => {
+              if (!accepted) {
+                enqueue()
+              }
+            }).catch(enqueue)
+          } else {
+            enqueue()
+          }
         }
       }),
-    [inputDisabled, paneVisible, scope.target, surfaceId]
+    [activeQueueSessionKeyRef, inputDisabled, paneVisible, scope.target, sessionId, surfaceId]
   )
 
   const submitDraft = () => {
