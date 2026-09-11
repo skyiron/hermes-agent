@@ -6,14 +6,21 @@ import { requestComposerSubmit } from '@/app/chat/composer/focus'
 import { useSessionView } from '@/app/chat/session-view'
 import { isFirstBuildSession } from '@/app/contrib/handoff-receipt'
 import { resolveSessionOwner } from '@/app/session/hooks/use-session-actions/utils'
-import { ToolFallback } from '@/components/assistant-ui/tool/fallback'
 import { FirstBuildConnectorOffer } from '@/components/assistant-ui/first-build-connectors'
+import { ToolFallback } from '@/components/assistant-ui/tool/fallback'
 import { Button } from '@/components/ui/button'
 import { ConnectorCard, type ConnectorCardCopy } from '@/components/ui/connector-card'
 import { Loader } from '@/components/ui/loader'
 import { SearchField } from '@/components/ui/search-field'
 import { useI18n } from '@/i18n'
-import { connectionRows, connectorCalls, connectorTitle, connectorToolName, recordOf } from '@/lib/connector-tools'
+import {
+  connectionRows,
+  connectorCalls,
+  connectorTitle,
+  connectorToolName,
+  latestConnectorPart,
+  recordOf
+} from '@/lib/connector-tools'
 import { createConnectorFlow } from '@/store/connector-flow'
 import { requestGatewayForAgent } from '@/store/gateway'
 import { $activeGatewayProfile } from '@/store/profile'
@@ -28,14 +35,7 @@ export function ConnectorTool(props: ToolCallMessagePartProps) {
   const messages = useStore(view.$messages)
   const firstBuild = isFirstBuildSession(storedId)
 
-  const latest = messages
-    .flatMap(message => message.parts)
-    .filter(
-      part =>
-        part.type === 'tool-call' &&
-        (part.toolName === 'manage_connections' || connectorCalls(part.toolName, part.args).length > 0)
-    )
-    .at(-1)
+  const latest = latestConnectorPart(messages)
 
   const historical = latest?.type === 'tool-call' && latest.toolCallId !== props.toolCallId
 
@@ -45,6 +45,7 @@ export function ConnectorTool(props: ToolCallMessagePartProps) {
     connectionId: null | string
     profile: string
   } | null>(null)
+
   const [ownerFailure, setOwnerFailure] = useState<string | null>(null)
 
   useEffect(() => {
