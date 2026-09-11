@@ -96,14 +96,7 @@ export function ConnectorTool(props: ToolCallMessagePartProps) {
   const signature = rows.map(row => row.connector).join('|')
 
   const flow = useMemo(() => {
-    if (
-      firstBuild ||
-      inert ||
-      !runtimeId ||
-      !owner ||
-      owner.storedId !== storedId ||
-      owner.runtimeId !== runtimeId
-    ) {
+    if (firstBuild || inert || !runtimeId || !owner || owner.storedId !== storedId || owner.runtimeId !== runtimeId) {
       return null
     }
 
