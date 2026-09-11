@@ -38,15 +38,28 @@ def auth_json_path():
 
 
 def _read_nous_provider_state() -> Optional[dict]:
-    """The profile's Nous state, or None. A free-tier identity counts only while the free tier is on:
-    with ``nous.guest: false`` it is invisible here, so no cached or refreshed token of it is ever
-    attached to a request."""
+    """The profile's Nous state, else the root's shared Nous state, else None.
+
+    The shared store is the identity of record for a Hermes root (``anon_auth``): a named profile
+    adopts it into its own ``providers.nous`` only when its bootstrap runs, and a profile whose
+    inference comes from elsewhere may never adopt it. The guided first launch is that case: the
+    welcome chat runs on the ``hermes-setup`` profile, whose store holds no Nous provider while the
+    root's shared store holds the guest. Reading the shared store here is what lets that session
+    reach connectors at all; the token it carries is refreshed by whichever profile owns it.
+
+    A free-tier identity counts only while the free tier is on: with ``nous.guest: false`` it is
+    invisible here, so no cached or refreshed token of it is ever attached to a request."""
     try:
+        nous_provider = None
         path = auth_json_path()
-        if not path.is_file():
-            return None
-        providers = json.loads(path.read_text(encoding="utf-8-sig")).get("providers", {})
-        nous_provider = providers.get("nous", {}) if isinstance(providers, dict) else None
+        if path.is_file():
+            providers = json.loads(path.read_text(encoding="utf-8-sig")).get("providers", {})
+            candidate = providers.get("nous") if isinstance(providers, dict) else None
+            nous_provider = candidate if isinstance(candidate, dict) and candidate else None
+        if nous_provider is None:
+            from hermes_cli.auth_nous import _read_shared_nous_state
+
+            nous_provider = _read_shared_nous_state()
         if not isinstance(nous_provider, dict):
             return None
         from hermes_cli.anon_auth import guest_enabled, is_guest_state
